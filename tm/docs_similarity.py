@@ -48,8 +48,8 @@ class DocSimilarity(object):
 def get_corpus():
     index2category = {}
     corpus = []
+    #with open('category_corpus_0515.txt') as f:
     with open('category_corpus_0514.txt') as f:
-    #with open('category_corpus.txt') as f:
         lines = f.readlines()
         for _index in xrange(len(lines)):
             line = lines[_index]
@@ -88,16 +88,17 @@ def classification():
     index = similarities.MatrixSimilarity.load('%s/category.index' % TMP_ROOT)
     #for ret in db_conn.query(EleFoodSegment).limit(200):
     #for ret in db_conn.execute("select * from ele_food_segments_2 order by rand() limit 200"):
-    #for ret in db_conn.execute("select * from ele_food_segments_2 where id in (63589)"):
+    #for ret in db_conn.execute("select * from ele_food_segments_2 where id in (65880)"):
     for ret in db_conn.execute("select * from ele_food_segments_2 where id not in (select restaurant_id from eleme_category) LIMIT 200"):
         k = ret[0]
         segments = ret[1]
         #segments = ret.segments
         #if k in test_restaurant_ids:
         doc = [w for w in json.loads(segments) if len(w) <= 5]
+        #print ",".join(doc)
         vec_bow = dictionary.doc2bow(doc)
         if len(vec_bow) >= 12:
-        #print "餐馆名: ", rid2name.get(str(k)), "\n构建特征词query: ", ",".join([_dict.get(w[0]) for w in vec_bow])
+            #print "餐馆名: ", rid2name.get(str(k)), "\n构建特征词query: ", ",".join([_dict.get(w[0]) for w in vec_bow])
             vec_lsi = lsi[vec_bow] # convert the query to LSI space
             sims = index[vec_lsi]
             tmp_sims = {}
@@ -122,5 +123,5 @@ def classification():
 if __name__ == '__main__':
     mymodel = DocSimilarity()
     mymodel.string2vector()
-    mymodel.build(8, 1901)
+    mymodel.build(8, 3423)
     classification()

@@ -18,6 +18,7 @@ from gensim import corpora, models
 
 db_conn = new_session()
 
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 def get_rid_2_name():
     # to redis
@@ -152,31 +153,42 @@ def basic_categorize():
 
 def get_terms_of_category():
     #取出每个菜系top250的特征词
+    corpus = []
     rid2name = json.loads(rc.get('rid2name'))
     category2resturant = json.loads(rc.get('category2resturant'))
+    index2category = {}
+    _index = 0
     for k, v in category2resturant.iteritems():
-        texts = []
-        ids = ",".join([str(i) for i in v])
-        sql = "select * from ele_food_segments_2 where id in (%s)" % ids
-        for ret in db_conn.execute(sql):
-            #print "%s\t%s\t%s" % (ret[0], rid2name.get(str(ret[0])).encode('utf-8'),  ",".join([w.encode('utf-8') for w in json.loads(ret[1]) if len(w) <= 5 and re.search(get_noise_terms(), w) is None]))
-            #print ret[0], rid2name.get(str(ret[0])), '------------->\r\n', ",".join([w for w in json.loads(ret[1]) if len(w) <= 5 and re.search(get_noise_terms(), w) is None])
-            terms = [w for w in json.loads(ret[1]) if len(w) <= 5]
-            texts.append(terms)
-        dictionary = corpora.Dictionary(texts)
-        corpus = [dictionary.doc2bow(text) for text in texts]
-        _s = sorted(dictionary.dfs.iteritems(), key=lambda d:d[1], reverse=True)
-        #print k, len(_s)
-        _dict = {}
-        for token, id in dictionary.token2id.iteritems():
-            _dict[id] = token
-        #if k  in [u'江浙菜',u'清真/新疆菜']:
-        #    print "%s\t%s" % (k.encode('utf-8'), ",".join([_dict.get(i[0]).encode('utf-8') for i in _s[:50]]))
-        #elif k in [u'东北菜', u'东南亚菜',u'湘菜',u'韩国料理']:
-        #    print "%s\t%s" % (k.encode('utf-8'), ",".join([_dict.get(i[0]).encode('utf-8') for i in _s[:80]]))
-        #else:
-        #    print "%s\t%s" % (k.encode('utf-8'), ",".join([_dict.get(i[0]).encode('utf-8') for i in _s[:200]]))
-        print "%s\t%s" % (k.encode('utf-8'), ",".join([_dict.get(i[0]).encode('utf-8') for i in _s[:250]]))
+        if k not in [u'火锅香锅',u'烧烤',u'粥店',u'麻辣烫',u'生煎锅贴',u'饺子馄饨',u'披萨',u'炸鸡汉堡',u'米粉面馆']:
+            texts = []
+            ids = ",".join([str(i) for i in v])
+            sql = "select * from ele_food_segments_2 where id in (%s)" % ids
+            for ret in db_conn.execute(sql):
+                terms = [w for w in json.loads(ret[1]) if len(w) <= 5]
+                texts.append(terms)
+            dictionary = corpora.Dictionary(texts)
+            _s = sorted(dictionary.dfs.iteritems(), key=lambda d:d[1], reverse=True)
+            _dict = {}
+            for token, id in dictionary.token2id.iteritems():
+                _dict[id] = token
+            corpus.append([_dict.get(i[0]) for i in _s[:1000]])
+            index2category[_index] = k
+            _index += 1
+        #print "%s\t%s" % (k.encode('utf-8'), ",".join([_dict.get(i[0]).encode('utf-8') for i in _s[:250]]))
+    dictionary = corpora.Dictionary(corpus)
+    _dict.clear
+    for token, id in dictionary.token2id.iteritems():
+        _dict[id] = token
+        #print id, token
+    features = set([])
+    for id, df in dictionary.dfs.iteritems():
+        #print _dict.get(i[0]).encode('utf-8'), i[1]
+        if df <= 4:
+            features.add(_dict.get(id))
+    for i in xrange(len(corpus)):
+        _category = index2category.get(i)
+        print "%s %s" % (_category.encode('utf-8'), ",".join([k.encode('utf-8') for k in corpus[i] if k in features]))
+
 
 def clean():
     index2category = {}
@@ -214,4 +226,3 @@ if __name__ == '__main__':
     #basic_categorize()
     #save2mysql()
     get_terms_of_category()
-    #clean()
