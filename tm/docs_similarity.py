@@ -68,13 +68,12 @@ category_weight = {u"清真/新疆菜" : 0.85,
                     u"面包甜点" : 0.8,
                     u"韩国料理" : 1,
                     u"东北菜" : 1,
-                    u"川菜" : 1.03,
+                    u"川湘菜" : 1.03,
                     u"特色小吃" : 1.06,
-                    u"日本料理" : 1,
+                    u"日韩料理" : 1,
                     u"江浙菜" : 1.03,
                     u"西餐" : 0.95,
                     u"粤菜" : 1.05,
-                    u"湘菜" : 1.03,
                     u"东南亚菜" : 0.85}
 
 def classification():
@@ -86,10 +85,9 @@ def classification():
         _dict[id] = token
     lsi = models.LsiModel.load("%s/model.lsi" % TMP_ROOT)
     index = similarities.MatrixSimilarity.load('%s/category.index' % TMP_ROOT)
-    #for ret in db_conn.query(EleFoodSegment).limit(200):
-    #for ret in db_conn.execute("select * from ele_food_segments_2 order by rand() limit 200"):
     #for ret in db_conn.execute("select * from ele_food_segments_2 where id in (65880)"):
-    for ret in db_conn.execute("select * from ele_food_segments_2 where id not in (select restaurant_id from eleme_category) LIMIT 200"):
+    for ret in db_conn.execute("select * from ele_food_segments_2 where id not in (select restaurant_id from eleme_category)"):
+    #for ret in db_conn.execute("select * from ele_food_segments_2 where id not in (select restaurant_id from eleme_category) order by rand() limit 100"):
         k = ret[0]
         segments = ret[1]
         #segments = ret.segments
@@ -97,17 +95,22 @@ def classification():
         doc = [w for w in json.loads(segments) if len(w) <= 5]
         #print ",".join(doc)
         vec_bow = dictionary.doc2bow(doc)
-        if len(vec_bow) >= 12:
+        if len(vec_bow) >= 8:
             #print "餐馆名: ", rid2name.get(str(k)), "\n构建特征词query: ", ",".join([_dict.get(w[0]) for w in vec_bow])
             vec_lsi = lsi[vec_bow] # convert the query to LSI space
             sims = index[vec_lsi]
             tmp_sims = {}
             for s in sims:
                 _category = index2category.get(str(s[0]))
-                tmp_sims[_category] = s[1]
-                #tmp_sims[_category] = s[1] * category_weight.get(_category)
+                if s[1] >= 0.9:
+                    #if _category in category_weight:
+                    #    tmp_sims[_category] = s[1] * category_weight.get(_category)
+                    #else:
+                    tmp_sims[_category] = s[1]
             _sort = sorted(tmp_sims.iteritems(), key=lambda d:d[1], reverse=True)
-            print "%s\t%s\t%s" % (k, rid2name.get(str(k)).encode('utf-8'), ",".join(["%s:%s" % (i[0].encode('utf-8'), i[1]) for i in _sort]))
+            if len(_sort) >= 1 and _sort[0][0].encode('utf-8') in ['快餐', '特色小吃']:
+                print "%s\t%s\t%s" % (k, rid2name.get(str(k)).encode('utf-8'), _sort[0][0].encode('utf-8'))
+                #print "%s\t%s\t%s" % (k, rid2name.get(str(k)).encode('utf-8'), ",".join(["%s:%s" % (i[0].encode('utf-8'), i[1]) for i in _sort]))
         #else:
         #    print k, rid2name.get(str(k)).encode('utf-8'), ",".join(doc)
         #print rid2name.get(str(k)), ",".join(doc)
@@ -123,5 +126,5 @@ def classification():
 if __name__ == '__main__':
     mymodel = DocSimilarity()
     mymodel.string2vector()
-    mymodel.build(8, 3423)
+    mymodel.build(8, 1901)
     classification()

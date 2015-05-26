@@ -20,6 +20,12 @@ db_conn = new_session()
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
+
+import mmseg
+
+#mmseg.Dictionary.load_dictionaries()
+mmseg.Dictionary.load_words('%s/feature.dict' % PROJECT_ROOT)
+
 def get_rid_2_name():
     # to redis
     _dict = {}
@@ -46,44 +52,44 @@ def get_corpus():
 def save2mysql():
     # 根据餐厅名对餐厅进行简单菜系分类，并存入mysql
     count = 0
-    rid2name = json.loads(rc.get('rid2name'))
-    category2resturant = json.loads(rc.get('category2resturant'))
-    _dict = {}
-    for k, v in category2resturant.iteritems():
-        #print k, ",".join([rid2name.get(str(i)) for i in v[:10]])
-        for id in v:
-            if id in _dict:
-                _dict[id].append(k)
-            else:
-                _dict[id] = [k]
-    for id, categories in _dict.iteritems():
-        try:
-            for c in categories:
-                item = ElemeCategory(**{'restaurant_id': id, 'name': rid2name.get(str(id)), 'category': c })
-                count += 1
-                db_conn.merge(item)
-                if count % 5000 == 0:
-                    print '%s commit ' % count
-                    db_conn.commit()
-        except Exception,e:
-            print e
-            db_conn.rollback() 
-
-    #f1 = get_data_from_files('match_rs_0421.txt')
-    #for line in f1:
+    #rid2name = json.loads(rc.get('rid2name'))
+    #category2resturant = json.loads(rc.get('category2resturant'))
+    #_dict = {}
+    #for k, v in category2resturant.iteritems():
+    #    #print k, ",".join([rid2name.get(str(i)) for i in v[:10]])
+    #    for id in v:
+    #        if id in _dict:
+    #            _dict[id].append(k)
+    #        else:
+    #            _dict[id] = [k]
+    #for id, categories in _dict.iteritems():
     #    try:
-    #        segs = line.rstrip().split('\t')
-    #        if len(segs) == 3:
-    #            id = int(segs[0])
-    #            item = ElemeCategory(**{'id': id, 'name':segs[1], 'category':segs[2]}) 
+    #        for c in categories:
+    #            item = ElemeCategory(**{'restaurant_id': id, 'name': rid2name.get(str(id)), 'category': c })
     #            count += 1
     #            db_conn.merge(item)
     #            if count % 5000 == 0:
     #                print '%s commit ' % count
     #                db_conn.commit()
     #    except Exception,e:
-    #        print line, e
+    #        print e
     #        db_conn.rollback() 
+
+    with open('match_rs_0515.txt') as f:
+        for line in f.readlines():
+            try:
+                segs = line.rstrip().split('\t')
+                if len(segs) == 3:
+                    id = int(segs[0])
+                    item = ElemeCategory(**{'restaurant_id': id, 'name':segs[1], 'category':segs[2]}) 
+                    count += 1
+                    db_conn.merge(item)
+                    if count % 5000 == 0:
+                        print '%s commit ' % count
+                        db_conn.commit()
+            except Exception,e:
+                print line, e
+                db_conn.rollback() 
     db_conn.commit()
 
 def get_custom_dict():
@@ -222,7 +228,88 @@ def clean():
         print "%s %s" % (_category, ",".join([k.encode('utf-8') for k in corpus[i] if k in features]))
 
 
+def get_cutomer_dict():
+    _list = []
+    with open('%s/0513_custom.dict' % PROJECT_ROOT) as f:
+        for line in f.readlines():
+            category, feature = line.rstrip().split()
+            _list.extend(feature.split('|'))
+    for k in _list:
+        print len(k.decode('utf-8')), k
+
+def feature_count():
+    corpus = []
+    with open('%s/restaurant.txt' % PROJECT_ROOT) as f:
+        for line in f.readlines():
+            id, restaurant = line.rstrip().split('\t')
+            corpus.append([i.text for i in mmseg.Algorithm(restaurant.decode('utf-8')) if len(i.text) >= 2])
+    dictionary = corpora.Dictionary(corpus)
+    _dict = {}
+    for token, id in dictionary.token2id.iteritems():
+        _dict[id] = token
+    _s = sorted(dictionary.dfs.iteritems(), key=lambda d:d[1], reverse=True)
+    for i in _s[:100]:
+        print _dict.get(i[0]), i[1]
+
+def handle_unknown_category():
+    corpus = []
+    rid2name = json.loads(rc.get('rid2name'))
+    for ret in db_conn.execute("select * from ele_food_segments_2 where id not in (select restaurant_id from eleme_category)"):
+        k = ret[0]
+        segments = ret[1]
+        doc = [w for w in json.loads(segments) if len(w) <= 5]
+        restaurant = rid2name.get(str(k))
+        print k, rid2name.get(str(k)), ",".join(doc)
+        #print (restaurant, '')
+    #    corpus.append([i.text for i in mmseg.Algorithm(restaurant) if len(i.text) >= 2])
+    #dictionary = corpora.Dictionary(corpus)
+    #_dict = {}
+    #for token, id in dictionary.token2id.iteritems():
+    #    _dict[id] = token
+    #_s = sorted(dictionary.dfs.iteritems(), key=lambda d:d[1], reverse=True)
+    #for i in _s[:100]:
+    #    print _dict.get(i[0]), i[1]
+
+
+def add_category():
+    count = 0
+    with open('bod_id') as f:
+        bods = set([int(i.rstrip()) for i in f.readlines()])
+    for ret in db_conn.query(ElemeCategory).all():
+        try:
+            if ret.category in [u'东北菜',u'川湘菜',u'粤菜', u'清真/新疆菜']:
+                item = ElemeCategory(**{'restaurant_id': ret.restaurant_id, 'name':ret.name, 'category':u'中式炒菜'}) 
+                count += 1
+                db_conn.merge(item)
+                if count % 5000 == 0:
+                    print '%s commit ' % count
+                    db_conn.commit()
+            if ret.category in [u'饮料甜点',u'面包蛋糕']:
+                item = ElemeCategory(**{'restaurant_id': ret.restaurant_id, 'name':ret.name, 'category':u'下午茶'}) 
+                count += 1
+                db_conn.merge(item)
+                if count % 5000 == 0:
+                    print '%s commit ' % count
+                    db_conn.commit()
+            if ret.restaurant_id in bods:
+                item = ElemeCategory(**{'restaurant_id': ret.restaurant_id, 'name':ret.name, 'category':u'品牌餐厅'}) 
+                count += 1
+                db_conn.merge(item)
+                if count % 5000 == 0:
+                    print '%s commit ' % count
+                    db_conn.commit()
+        except Exception,e:
+            print line, e
+            db_conn.rollback() 
+    db_conn.commit()
+
 if __name__ == '__main__':
     #basic_categorize()
     #save2mysql()
-    get_terms_of_category()
+    #get_cutomer_dict()
+    #get_terms_of_category()
+    #feature_count()
+    #handle_unknown_category()
+    #add_category()
+    for ret in db_conn.query(ElemeCategory).all():
+        print "%s\t%s" % (ret.restaurant_id, ret.category.encode('utf-8'))
