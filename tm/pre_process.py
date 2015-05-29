@@ -126,13 +126,6 @@ def ele_food_segments():
             db_conn.commit()
     db_conn.commit()
 
-def get_noise_terms():
-    _s = set([])
-    with open('frequency_term.txt') as f:
-        for line in f.readlines():
-            _s.add(line.rstrip().decode('utf-8'))
-    return u"|".join(list(_s))
-
 def basic_categorize():
     #设定规则，根据餐厅名进行简单的菜系分类
     category2feature = {}
@@ -146,7 +139,6 @@ def basic_categorize():
         rid = int(rid)
         for c,f  in category2feature.iteritems():
             if re.search(f, rname) is not None:
-                is_match = True
                 if c in category2resturant:
                     category2resturant[c].append(rid)
                 else:
