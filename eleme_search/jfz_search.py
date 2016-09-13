@@ -19,25 +19,6 @@ DOC_TYPE = "poi_type"
 conn = ES('127.0.0.1:9200', timeout=3.5)#连接ES
 _ses = requests.session()
 
-def get_distance(lat1, lng1, lat2, lng2):
-    """
-    计算两个经纬度之间的距离(单位米)
-    """
-    try:
-        rad = lambda d: d * math.pi / 180.0
-
-        EARTH_RADIUS = 6378.137
-        radLat1 = rad(lat1)
-        radLat2 = rad(lat2)
-        a = radLat1 - radLat2
-        b = rad(lng1) - rad(lng2)
-        s = 2 * math.asin(math.sqrt(math.pow(math.sin(a / 2), 2) +
-            math.cos(radLat1) * math.cos(radLat2) * math.pow(math.sin(b / 2), 2)))
-        s = s * EARTH_RADIUS
-        return int(round(s * 1000.0))
-    except:
-        pass
-    return -1
 
 def cosine_similarity(s1, s2):
     excludes = [u'路', u'号', u'楼', u'弄',u'巷']
@@ -103,13 +84,6 @@ def search_poi(keyword=u'', city_name=u'', address=u'', tel='', lat=0, lon=0, ra
         #for w in es_analyzer(text=single_words, analyzer="whitespace"):
         #    single_addr_q = TermQuery(u"address1", w, boost=0.05)
         #    bq1.append(single_addr_q)
-    if lat>0 and lon>0:
-        geo_filter.append(GeoDistanceFilter(field="location",location={"lat":lat, "lon":lon}, distance="%sm" % radius))
-        #interval = 0.001
-        #geo_filter.append(GeoBoundingBoxFilter("location",
-        #        location_tl={"lat" : lat+interval, "lon" :lon-interval},
-        #        location_br={"lat" : lat-interval, "lon" :lon+interval}))
-        bf = BoolFilter(must=geo_filter)
     if city_name:
         city_name_q = TermQuery(u"city_name", city_name)
         bq2.append(city_name_q)
@@ -157,13 +131,40 @@ def search_poi(keyword=u'', city_name=u'', address=u'', tel='', lat=0, lon=0, ra
             #pass
     return {'data': ret, 'total': 0}
 
+def get_data():
+	from define import cursor 
+	rs = []
+	stop_list = []
+	cursor.execute("select id, prd_short_name, prd_full_name,  prd_issue_company_name, prd_lift from crm_product_info where is_delete=0 and prd_full_name<>'' and prd_full_name not like '%测试%'")
+	#cursor.execute("select id, prd_short_name, prd_full_name,  prd_issue_company_name, upstream_compnay_name, prd_lift from crm_product_info where is_delete=0 AND prd_issue_company_name='中融信托' and prd_full_name<>''")
+	for ret in cursor.fetchall():
+		id, prd_short_name, prd_full_name,  prd_issue_company_name, upstream_compnay_name, prd_lift = ret 
+		prefix = u''
+		prd_short_name_2 = prd_short_name
+		segs = re.split(u'－|•|\s+|–|\-|﹒|▪|\:|：|●|\·|—', prd_full_name)
+		if len(segs)>=2:
+			prefix = segs[0]
+			prd_short_name_2 = "".join(segs[1:])
+		if prd_lift is None:
+			prd_lift = -1
+
+
+	from collections import defaultdict
+	frequency = defaultdict(int)
+	for text in texts:
+	    for token in text:
+	        frequency[token] += 1
+		#print prefix, prd_full_name, type(prd_lift), prd_lift
+		#m = re.search(u'(（|\()([0-9\u4e00-\u4e5d]+[\u4e00-\u9fa5]*)(\)|）)', prd_full_name)
+		#if m is not None:
+		#	print id, prd_full_name, m.group(2) 
+
+		#if re.search(u'[^\u4e00-\u9fa5]', prd_full_name) and re.search('[^a-zA-Z0-9]', prd_full_name):
+		#	for token in re.findall(u'[^\u4e00-\u9fa5]', prd_full_name) :
+		#		print token
+		#		if re.search('[a-zA-Z0-9]', token) is None and token.encode('utf-8') not in stop_list:
+		#			#print token.encode('utf-8')
+		#			stop_list.append(token.encode('utf-8'))
+		##if re.search(u'[\u4e00-\u9fa5]')
+
 if __name__ == '__main__':
-	pass
-    #for i in search_poi(address=u"", length=5, city_name=u'上海', lat=31.2319850922, lon=121.452655792)['data']:
-    #for i in search_poi(address=u"路", length=5, city_name=u'上海')['data']:
-    #   print i
-    #    print i['name']
-    #for i in es_analyzer(text='华宸·鸿泰[2012]02号白雁湖化工技改贷款项目集合资金信托计划(1.5年)', analyzer='ik_smart'):
-    #    print i
-    #print cosine_similarity('招商汇智之鼎锋集合资产管理计划', '招商汇智之鼎锋C类份额集合资产管理计划')
-    #print cosine_similarity('兴业信托-鼎锋成长3期证券投资集合资金信托计划', '招商汇智之鼎锋C类份额集合资产管理计划')
